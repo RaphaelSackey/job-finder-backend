@@ -90,6 +90,67 @@ def logIn():
            cursor.close()
            return response
        
+@app.route('/postjob', methods = ['POST'])
+@jwt_required()
+def postJobs():
+    response = jsonify({'message':'somehting is wrong'})
+    if request.is_json:
+        data = request.json
+        pay = data['Pay']
+        description = data['description']
+        jobName = data['jobName']
+        user = get_jwt_identity()
+        jobType = data['jobType']
+        location = data['location']
+
+        try:
+            cursor = mysql.connection.cursor()
+            query = 'insert into jobs (user_email, title, description, pay, type, location) values (%s,%s,%s,%s,%s,%s)'
+            cursor.execute(query, (user, jobName, description, pay, jobType, location))
+            mysql.connection.commit()
+            response = make_response(jsonify({'message': 'jop posted'}),200)
+        except Exception as e:
+            response = make_response(jsonify({'message': 'something went wrong', 'error': e}),500)
+            mysql.connection.rollback()
+        finally:
+            cursor.close()
+            return response
+
+@app.route('/getjobs', methods = ['post'])
+def getjobs():
+    # not using this function right now. get the posted jobs by location
+    def getQuery(location):
+        if not location:
+            location = 'New York, NY'
+        
+        query  = 'select * from jobs where location = %s'
+        values = (location,)
+
+        return query, values
+
+                    
+    if request.is_json:
+        data = request.json
+        location = data['location']
+
+        query = 'select * from jobs'
+        try:
+           cursor = mysql.connection.cursor()
+           cursor.execute(query)
+           results = cursor.fetchall()
+           response = make_response(jsonify({'data': results, 'message': 'job data retrieved'}))
+
+        except Exception as e:
+            response = make_response(jsonify({'message': 'something went wrong', 'error': e}))
+            mysql.connection.rollback()
+            
+        finally:
+            cursor.close()
+            return response
+
+        
+
+
 @app.route('/protected', methods = ['POST', 'GET'])
 @jwt_required()
 def protected():
@@ -111,10 +172,6 @@ def generateTokens(email, refreshIncluded = True):
     access_token = create_access_token(identity=email)
     refresh_token = create_refresh_token(identity=email) if refreshIncluded else ''
     return access_token, refresh_token if refresh_token else ''
-
-
-def refreshToken():
-    pass
 
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
@@ -152,4 +209,4 @@ def revoked_token_callback(jwt_header, jwt_payload):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port= 5001)
+    app.run(debug=True, port= 5000)
