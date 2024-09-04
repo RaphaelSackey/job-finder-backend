@@ -1,11 +1,12 @@
 from flask import Flask, request, make_response, jsonify 
+import pymysql
+pymysql.install_as_MySQLdb()
 from flask_cors import CORS
 from flask_mysqldb import MySQL
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, create_refresh_token
 
-#some lin2wsad
 
 app = Flask(__name__)
 CORS(app)
@@ -149,7 +150,76 @@ def getjobs():
             return response
 
         
+@app.route('/apply', methods = ['POST'])
+def apply():
+    if request.is_json:
+        data = request.json
+        jobId = data['jobId']
+        name = data['firstName']+ ' ' + data['lastName']
+        email = data['email']
+        phone = data['phone']
+        description = data['description']
 
+        query = 'insert into job_applications (job_id, applicant_name, applicant_email, phone, application_description) values (%s,%s,%s,%s,%s)'
+
+        try:
+            cursor = mysql.connection.cursor()
+            cursor.execute(query, (jobId, name, email, phone, description))
+            mysql.connection.commit()
+            response = make_response(jsonify({'message': 'successfully applied for job'}))
+
+        except Exception as e:
+            response = make_response(jsonify({'message': 'something went wrong', 'error': e}))
+            mysql.connection.rollback()
+
+        finally:
+            cursor.close()
+            return response
+
+            
+@app.route('/applicants', methods = ['POST'])
+@jwt_required()
+def applied():
+    id = get_jwt_identity()
+    query = '''
+        SELECT 
+            j.job_id,
+            j.title AS job_title,
+            j.description AS job_description,
+            j.location,
+            j.pay,
+            j.type,
+            j.created_at,
+            ja.application_id,
+            ja.applicant_name,
+            ja.applicant_email,
+            ja.phone,
+            ja.application_description,
+            ja.applied_at
+        FROM 
+            jobs j
+        LEFT JOIN 
+            job_applications ja ON j.job_id = ja.job_id
+        WHERE 
+            j.user_email = %s
+        ORDER BY 
+            j.job_id, ja.applied_at;
+        '''
+    try:
+        cursor = mysql.connection.cursor()
+        cursor.execute(query, (id,))
+        results = cursor.fetchall()
+        response = make_response(jsonify({'message': 'success', 'data': results}))
+
+
+    except Exception as e:
+        response = make_response(jsonify({'message': 'something went wrong', 'error': e}))
+        mysql.connection.rollback()
+    finally:
+        cursor.close()
+        return response
+
+            
 
 @app.route('/protected', methods = ['POST', 'GET'])
 @jwt_required()
